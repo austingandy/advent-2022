@@ -10,6 +10,7 @@ import (
 
 func main() {
 	logger := log.Logger{}
+	logger.SetOutput(os.Stdout)
 	f, err := os.Open("./input.txt")
 	if err != nil {
 		logger.Fatalf("Failed to open file: %s", err.Error())
@@ -29,7 +30,7 @@ func main() {
 		}
 		score += scoreGame(mine, theirs)
 	}
-	fmt.Printf("Score: %d\n", score)
+	logger.Printf("Score: %d\n", score)
 }
 
 type Throw string

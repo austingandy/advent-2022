@@ -10,6 +10,7 @@ import (
 
 func main() {
 	logger := log.Logger{}
+	logger.SetOutput(os.Stdout)
 	f, err := os.Open("./input.txt")
 	if err != nil {
 		logger.Fatalf("Failed to open file: %s", err.Error())
@@ -31,7 +32,7 @@ func main() {
 		}
 		currFood = append(currFood, v)
 	}
-	fmt.Printf("got foods for %d elves\n", len(foods))
+	logger.Printf("got foods for %d elves\n", len(foods))
 	maxes := make([]int, 0, 3)
 	for _, foodSet := range foods {
 		curr := 0
@@ -57,5 +58,5 @@ func main() {
 	for i := range maxes {
 		sum += maxes[i]
 	}
-	fmt.Printf("Max: %v\n", sum)
+	logger.Printf("Max: %v\n", sum)
 }

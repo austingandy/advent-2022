@@ -10,6 +10,7 @@ import (
 
 func main() {
 	logger := log.Logger{}
+	logger.SetOutput(os.Stdout)
 	f, err := os.Open("./input.txt")
 	if err != nil {
 		logger.Fatalf("Failed to open file: %s", err.Error())
@@ -48,7 +49,7 @@ func main() {
 		t += iPrio
 	}
 	groups = append(groups, group)
-	fmt.Printf("Total (part 1): %d\n", t)
+	logger.Printf("Total (part 1): %d\n", t)
 	t = 0
 	for _, g := range groups {
 		i, err := findIntersect(g...)
@@ -65,7 +66,7 @@ func main() {
 		}
 		t += p
 	}
-	fmt.Printf("Total (part 2): %d\n", t)
+	logger.Printf("Total (part 2): %d\n", t)
 
 }
 
