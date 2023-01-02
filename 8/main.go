@@ -42,11 +42,11 @@ func main() {
 
 type Grid [][]int
 type Direction func(i, j int) (int, int)
-type ReturnIndicator[T any] func(target, curr int, old T, grid Grid) (T, bool)
+type ReturnIndicator[T any] func(target, curr int, old T) (T, bool)
 
 func (this Grid) isHidden(i, j int) bool {
 	for _, d := range []Direction{north, south, east, west} {
-		if !this.isHiddenInDir(i, j, d) {
+		if !genericInDir[bool](i, j, d, this, func(target, curr int, _ bool) (bool, bool) { return target <= curr, target <= curr }) {
 			return false
 		}
 	}
@@ -56,23 +56,14 @@ func (this Grid) isHidden(i, j int) bool {
 func (this Grid) scenicScore(i, j int) int {
 	dist := 1
 	for _, d := range []Direction{north, south, east, west} {
-		dist *= this.scoreInDir(i, j, d)
+		dist *= genericInDir[int](i, j, d, this, func(target, curr, old int) (int, bool) { return old + 1, curr >= target })
 	}
 	return dist
 }
 
-func (this Grid) isHiddenInDir(i, j int, d Direction) bool {
-	return genericInDir[bool](i, j, d, this, func(target, curr int, _ bool, grid Grid) (bool, bool) {
-		if target <= curr {
-			return true, true
-		}
-		return false, false
-	})
-}
-
 func genericInDir[T any](i, j int, d Direction, grid Grid, ri ReturnIndicator[T]) (v T) {
 	for k, l := d(i, j); k >= 0 && l >= 0 && k < len(grid) && l < len(grid[k]); k, l = d(k, l) {
-		newVal, shouldReturn := ri(grid[i][j], grid[k][l], v, grid)
+		newVal, shouldReturn := ri(grid[i][j], grid[k][l], v)
 		if shouldReturn {
 			return newVal
 		}
@@ -81,14 +72,7 @@ func genericInDir[T any](i, j int, d Direction, grid Grid, ri ReturnIndicator[T]
 	return v
 }
 
-func (this Grid) scoreInDir(i, j int, d Direction) int {
-	return genericInDir[int](i, j, d, this, func(target, curr, old int, grid Grid) (int, bool) { return old + 1, curr >= target })
-}
-
 func north(i, j int) (int, int) { return i - 1, j }
-
 func south(i, j int) (int, int) { return i + 1, j }
-
-func east(i, j int) (int, int) { return i, j + 1 }
-
-func west(i, j int) (int, int) { return i, j - 1 }
+func east(i, j int) (int, int)  { return i, j + 1 }
+func west(i, j int) (int, int)  { return i, j - 1 }
