@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -17,59 +18,46 @@ func main() {
 	}
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
-	rootDir := NewDir("/", nil)
-	currDir := rootDir
+	root := NewDir(nil)
+	curr := root
 	for scanner.Scan() {
 		tokens, isCommand := ParseLine(scanner.Text())
 		if (tokens[0] == "ls" && len(tokens) != 1) || (tokens[0] != "ls" && len(tokens) != 2) {
 			logger.Fatalf("malformed input: %s", tokens)
 		}
 		if isCommand {
-			switch tokens[0] {
-			case "ls":
-				continue
-			case "cd":
-				dest := tokens[1]
-				if dest == "/" {
-					currDir = rootDir
-					continue
-				}
-				if dest == ".." {
-					parent := currDir.parent
-					if parent == nil {
-						logger.Fatalf("no parent directory exists for dir: %v", currDir)
-					}
-					currDir = parent
-					continue
-				}
-				currDir = currDir.GetOrAddSubdir(dest)
-				continue
-			default:
+			if tokens[0] != "ls" && tokens[0] != "cd" {
 				logger.Fatalf("unrecognized command: %s", tokens[0])
+			} else if tokens[0] == "cd" {
+				if tokens[1] == "/" {
+					curr = root
+				} else if tokens[1] == ".." {
+					curr = curr.parent
+					continue
+				} else {
+					curr = curr.AddOrGetDir(tokens[1])
+				}
 			}
+			continue
 		}
 		if tokens[0] == "dir" {
-			currDir.GetOrAddSubdir(tokens[1])
+			curr.AddOrGetDir(tokens[1])
 			continue
 		}
 		size, err := strconv.ParseInt(tokens[0], 10, 64)
 		if err != nil {
-			logger.Fatalf("unrecognized token for line: %s", tokens)
+			logger.Fatalf("malformed line: %s", tokens)
 		}
-		currDir.AddFile(tokens[1], size)
+		curr.files[tokens[1]] = size
 	}
-	dirs := rootDir.GetDirsUnderSize(int64(100000))
-	sizeOfSmallDirs := int64(0)
-	for _, d := range dirs {
-		sizeOfSmallDirs += d.GetSize()
+	smallDirSize := int64(0)
+	for _, d := range root.GetDirsCompSize(func(a int64) bool { return a < int64(100000) }) {
+		smallDirSize += d.GetSize()
 	}
-	logger.Printf("Total size: %d", sizeOfSmallDirs)
-	totalSpace := int64(70000000)
-	neededSpace := int64(30000000)
-	currentSpace := totalSpace - rootDir.GetSize()
-	toFree := neededSpace - currentSpace
-	toDelete := rootDir.FindSmallestDirGreaterThan(toFree)
-	logger.Printf("Size of directory to delete: %d", toDelete.GetSize())
+	logger.Printf("Size (Part 1): %d", smallDirSize)
+	candidates := root.GetDirsCompSize(func(a int64) bool { return a > int64(30000000)-(int64(70000000)-root.GetSize()) })
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].GetSize() < candidates[j].GetSize() })
+	logger.Printf("Size (Part 2): %d", candidates[0].GetSize())
 }
 
 func ParseLine(l string) ([]string, bool) {
@@ -81,85 +69,44 @@ func ParseLine(l string) ([]string, bool) {
 }
 
 type Dir struct {
-	name    string
-	subdirs []*Dir
+	subdirs map[string]*Dir
 	files   map[string]int64
 	parent  *Dir
 	size    *int64
 }
 
-func NewDir(name string, parent *Dir) *Dir {
-	return &Dir{name: name, parent: parent, files: make(map[string]int64)}
+func NewDir(parent *Dir) *Dir {
+	return &Dir{parent: parent, files: make(map[string]int64), subdirs: make(map[string]*Dir)}
 }
 
-func (this *Dir) AddFile(name string, size int64) {
-	this.files[name] = size
-}
-
-func (this *Dir) AddDir(d *Dir) {
-	d.parent = this
-	this.subdirs = append(this.subdirs, d)
-}
-
-func (this *Dir) GetSubdir(name string) *Dir {
-	for _, subdir := range this.subdirs {
-		if subdir.name == name {
-			return subdir
-		}
+func (this *Dir) AddOrGetDir(name string) *Dir {
+	if _, ok := this.subdirs[name]; !ok {
+		this.subdirs[name] = NewDir(this)
 	}
-	return nil
-}
-
-func (this *Dir) GetOrAddSubdir(name string) *Dir {
-	subdir := this.GetSubdir(name)
-	if subdir == nil {
-		subdir = NewDir(name, this)
-		this.AddDir(subdir)
-	}
-	return subdir
+	return this.subdirs[name]
 }
 
 func (this *Dir) GetSize() int64 {
 	if this.size != nil {
 		return *this.size
 	}
-	fs := int64(0)
+	totalSize := int64(0)
 	for _, size := range this.files {
-		fs += size
+		totalSize += size
 	}
-	sds := int64(0)
 	for _, sd := range this.subdirs {
-		sds += sd.GetSize()
+		totalSize += sd.GetSize()
 	}
-	size := fs + sds
-	this.size = &size
-	return size
+	this.size = &totalSize
+	return totalSize
 }
 
-func (this *Dir) GetDirsUnderSize(threshold int64) []*Dir {
-	return this.GetDirsCompSize(func(a int64) bool { return a < threshold })
-}
-
-func (this *Dir) GetDirsCompSize(comp func(a int64) bool) []*Dir {
-	dirs := make([]*Dir, 0)
-	size := this.GetSize()
-	if comp(size) {
+func (this *Dir) GetDirsCompSize(comp func(a int64) bool) (dirs []*Dir) {
+	if comp(this.GetSize()) {
 		dirs = append(dirs, this)
 	}
 	for _, sd := range this.subdirs {
 		dirs = append(dirs, sd.GetDirsCompSize(comp)...)
 	}
-	return dirs
-}
-
-func (this *Dir) FindSmallestDirGreaterThan(threshold int64) *Dir {
-	dirs := this.GetDirsCompSize(func(a int64) bool { return a > threshold })
-	v, d := int64(1<<63-1), (*Dir)(nil)
-	for _, dir := range dirs {
-		size := dir.GetSize()
-		if size < v {
-			v, d = size, dir
-		}
-	}
-	return d
+	return
 }
