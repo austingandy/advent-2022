@@ -16,178 +16,224 @@ func main() {
 	}
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
-	hill := NewHill()
+	topology := make([][]string, 0)
 	for scanner.Scan() {
 		input := scanner.Text()
 		line := make([]string, 0, len(input))
 		for _, s := range input {
 			line = append(line, string(s))
 		}
-		hill.Topology = append(hill.Topology, line)
+		topology = append(topology, line)
 	}
-	s, err := hill.StartingPos()
-	if err != nil {
-		log.Fatalf("Error retreiving starting position: %s", err.Error())
+	hill := NewHill(topology)
+	start := hill.Find("S")
+	path := hill.aStar(start, "E")
+	fmt.Printf("shortest distance (Part 1): %d\n", len(path)-1)
+	hill.PrintPath(path)
+	c := hill.FindAll("a")
+	lengths := make([]int, 0)
+	best := len(path)
+	for _, v := range c {
+		hill.Reset()
+		currPath := hill.aStar(v, "E")
+		currLen := len(currPath)
+		if currPath == nil {
+			continue
+		}
+		want := Pos{Y: 4, X: 0}
+		if v.Pos == want {
+			hill.PrintPath(currPath)
+		}
+		fmt.Printf("path length was: %d\n", currLen)
+		lengths = append(lengths, currLen)
+		if currLen < best {
+			best = currLen
+		}
 	}
-	fmt.Printf("Starting position is X: %d, Y: %d\n", s.X, s.Y)
-	l, path, err := hill.Climb()
-	if err != nil {
-		log.Fatalf("fell down the hill: %s", err.Error())
-	}
-	fmt.Printf("shortest distance was %d\n", l)
-	fmt.Println("path was:")
-	for _, p := range path {
-		fmt.Printf("(%d,%d)\n", p.X, p.Y)
+	fmt.Printf("shortest distance (Part 2): %d\n", best-1)
+}
+
+type Vertex struct {
+	value     string
+	gScore    float64
+	cameFrom  *Vertex
+	Pos       Pos
+	Elevation int
+}
+
+func NewVertex(value string, p Pos, elevation int) *Vertex {
+	return &Vertex{
+		value:     value,
+		gScore:    math.MaxFloat64,
+		Pos:       p,
+		Elevation: elevation,
 	}
 }
 
-type Hill struct {
-	Topology   [][]string
-	Elevations map[string]int
-	visited    map[Pos]bool
-}
+type Hill [][]*Vertex
 
-func NewHill() Hill {
+func NewHill(top [][]string) Hill {
 	elevations := map[string]int{"S": 1, "E": 26}
 	for i, l := range "abcdefghijklmnopqrstuvwxyz" {
 		elevations[string(l)] = i + 1
 	}
-	return Hill{
-		Elevations: elevations,
-		visited:    make(map[Pos]bool),
-	}
-}
-
-func (t Hill) Climb() (int, []Pos, error) {
-	t.visited = make(map[Pos]bool)
-	p, err := t.StartingPos()
-	if err != nil {
-		return 0, nil, fmt.Errorf("error retreiving starting position: %s", err.Error())
-	}
-	var path []Pos
-	depth, l := 10, math.MaxInt
-	for depth < l {
-		fmt.Printf("traversing for depth %d. currrent length is %d\n", depth, l)
-		l, path = t.visit(p, []Pos{}, depth)
-		depth += 1
-	}
-	return l, path, nil
-}
-
-func (t Hill) PrintGrid() {
-	rows, row := make([]string, 0), ""
-	for _, pos := range t.Positions() {
-		if t.visited[pos] {
-			row += "x"
-		} else {
-			row += t.charAt(pos)
-		}
-		if len(row) >= len(t.Topology) {
-			rows = append(rows, row)
-			row = ""
+	hill := make([][]*Vertex, len(top))
+	for i := range top {
+		hill[i] = make([]*Vertex, len(top[i]))
+		for j := range top[i] {
+			val := top[i][j]
+			hill[i][j] = NewVertex(val, Pos{Y: i, X: j}, elevations[val])
 		}
 	}
-	rows = append(rows, row)
-	for _, roww := range rows {
-		fmt.Println(roww)
-	}
+	return hill
 }
 
-func (t Hill) visit(p Pos, path []Pos, maxDepth int) (int, []Pos) {
-	if len(path) >= maxDepth {
-		//fmt.Printf("[depth %d] exceeded max depth of %d at position (%d, %d)\n", maxDepth, len(path), p.X, p.Y)
-		return math.MaxInt, path
+func (this Hill) aStar(start *Vertex, goal string) []Pos {
+	discovered := []*Vertex{start}
+	start.gScore = 0
+	curr := start
+	for len(discovered) != 0 {
+		sort.Slice(discovered, func(i, j int) bool {
+			return discovered[i].fScore(curr.Pos) < discovered[j].fScore(curr.Pos)
+		})
+		curr, discovered = discovered[0], discovered[1:]
+		if curr.value == goal {
+			p := buildPath(curr)
+			this.Reset()
+			return p
+		}
+		for _, n := range this.Neighbors(curr.Pos) {
+			score := curr.gScore + curr.Pos.Euclid(n.Pos)
+			if score < n.gScore {
+				n.cameFrom = curr
+				n.gScore = score
+				isDiscovered := false
+				for _, d := range discovered {
+					if d == n {
+						isDiscovered = true
+						break
+					}
+				}
+				if !isDiscovered {
+					discovered = append(discovered, n)
+				}
+			}
+		}
 	}
+	return nil
+}
 
-	newPath := make([]Pos, len(path))
-	for i := range path {
-		newPath[i] = path[i]
+func (this *Vertex) fScore(curr Pos) float64 {
+	if this.gScore == math.MaxFloat64 {
+		return this.gScore
 	}
-	t.visited[p] = true
-	newPath = append(newPath, p)
-	//if len(newPath)%10 == 0 {
-	//	fmt.Printf("[depth %d] maxDepth is %d\n", len(newPath), maxDepth)
-	//}
-	//fmt.Printf("[depth %d] visiting (%d, %d). current path is:\n", len(newPath), p.X, p.Y)
-	//t.PrintGrid()
-	if t.charAt(p) == "E" {
-		fmt.Printf("[depth %d] Made it!!\n", len(newPath))
-		return 0, newPath
-	}
-	candidates := make([]Pos, 0, len(dirs))
+	return this.gScore + this.Pos.Euclid(curr)
+}
+
+func (this Hill) Neighbors(p Pos) []*Vertex {
+	n := make([]*Vertex, 0, len(dirs))
 	for _, d := range dirs {
 		next := d(p)
-		if !t.isValid(next) {
-			//fmt.Printf("\t[depth %d] position (%d, %d) not valid in grid\n", len(newPath), next.X, next.Y)
+		if !this.isValid(next) || this.Get(next).Elevation-this.Get(p).Elevation > 1 {
 			continue
 		}
-		if t.visited[next] {
-			//fmt.Printf("\t[depth %d] already visited (%d, %d)\n", len(newPath), next.X, next.Y)
-			continue
-		}
-		if t.Elevation(next)-t.Elevation(p) > 1 {
-			//fmt.Printf("\t[depth %d] elevation of position (%d, %d) too high from position (%d, %d)\n", len(newPath), next.X, next.Y, p.X, p.Y)
-			continue
-		}
-		candidates = append(candidates, next)
+		n = append(n, this.Get(next))
 	}
-	if len(candidates) == 0 {
-		return math.MaxInt, newPath
-	}
-	sort.Slice(candidates, func(i, j int) bool { return t.Elevation(candidates[i]) > t.Elevation(candidates[j]) })
-	var minPath []Pos
-	min := math.MaxInt
-	for _, candidate := range candidates {
-		if min == 0 {
-			break
+	return n
+}
+
+func (this Hill) Find(val string) *Vertex {
+	for i := range this {
+		for j := range this[i] {
+			if v := this[i][j]; v.value == val {
+				return v
+			}
 		}
-		var newMaxDepth int
-		if min > maxDepth {
-			newMaxDepth = maxDepth
+	}
+	return nil
+}
+
+func (this Hill) FindAll(val string) []*Vertex {
+	vs := make([]*Vertex, 0)
+	for i := range this {
+		for j := range this[i] {
+			if v := this[i][j]; v.value == val {
+				vs = append(vs, v)
+			}
+		}
+	}
+	return vs
+}
+
+func (this Hill) GetVertices() []*Vertex {
+	vs := make([]*Vertex, 0)
+	for i := range this {
+		for j := range this[i] {
+			vs = append(vs, this[i][j])
+		}
+	}
+	return vs
+}
+
+func (this Hill) Get(p Pos) *Vertex {
+	return this[p.Y][p.X]
+}
+
+func (this Hill) PrintPath(path []Pos) {
+	posMap := make(map[Pos]string)
+	for i := 1; i < len(path); i++ {
+		last, curr := path[i-1], path[i]
+		switch curr {
+		case down(last):
+			posMap[last] = "v"
+		case up(last):
+			posMap[last] = "^"
+		case left(last):
+			posMap[last] = "<"
+		case right(last):
+			posMap[last] = ">"
+		default:
+			posMap[last] = "?"
+		}
+	}
+	for i, v := range this.GetVertices() {
+		if c, ok := posMap[v.Pos]; ok {
+			fmt.Printf(c)
 		} else {
-			newMaxDepth = min + len(newPath)
+			fmt.Printf(v.value)
 		}
-		length, cPath := t.visit(candidate, newPath, newMaxDepth)
-		if length < min {
-			min, minPath = length, cPath
+		if i%len(this[0]) == 0 {
+			fmt.Printf("\n")
 		}
-		t.visited[candidate] = false
 	}
-	if min == math.MaxInt {
-		return min, newPath
+	fmt.Println()
+}
+
+func (this Hill) Reset() {
+	for _, v := range this.GetVertices() {
+		v.cameFrom = nil
+		v.gScore = math.MaxFloat64
 	}
-	return 1 + min, minPath
 }
 
-func (t Hill) isValid(p Pos) bool {
-	return p.X >= 0 && p.Y >= 0 && p.Y < len(t.Topology) && p.X < len(t.Topology[p.Y])
+func (this Hill) isValid(p Pos) bool {
+	return p.X >= 0 && p.Y >= 0 && p.Y < len(this) && p.X < len(this[p.Y])
 }
 
-func (t Hill) Elevation(p Pos) int {
-	return t.Elevations[t.Topology[p.Y][p.X]]
-}
-
-func (t Hill) charAt(p Pos) string {
-	return t.Topology[p.Y][p.X]
-}
-
-func (t Hill) Positions() []Pos {
-	positions := make([]Pos, 0, len(t.Topology)*len(t.Topology[0]))
-	for y := range t.Topology {
-		for x := range t.Topology[y] {
-			positions = append(positions, Pos{Y: y, X: x})
-		}
+func (this Hill) Positions() []Pos {
+	positions := make([]Pos, 0)
+	for _, v := range this.GetVertices() {
+		positions = append(positions, v.Pos)
 	}
 	return positions
 }
 
-func (t Hill) StartingPos() (Pos, error) {
-	for _, p := range t.Positions() {
-		if t.charAt(p) == "S" {
-			return p, nil
-		}
+func buildPath(to *Vertex) []Pos {
+	path := []Pos{to.Pos}
+	for v := to.cameFrom; v != nil; v = v.cameFrom {
+		path = append([]Pos{v.Pos}, path...)
 	}
-	return Pos{}, fmt.Errorf("no starting position found")
+	return path
 }
 
 type Pos struct {
@@ -195,22 +241,20 @@ type Pos struct {
 	Y int
 }
 
+func (this Pos) Euclid(that Pos) float64 {
+	xDist := this.X - that.X
+	yDist := this.Y - that.Y
+	return math.Sqrt(float64(xDist*xDist) + float64(yDist*yDist))
+}
+
 type Direction func(p Pos) Pos
 
-func up(p Pos) Pos {
-	return Pos{Y: p.Y - 1, X: p.X}
-}
+func up(p Pos) Pos { return Pos{Y: p.Y - 1, X: p.X} }
 
-func down(p Pos) Pos {
-	return Pos{Y: p.Y + 1, X: p.X}
-}
+func down(p Pos) Pos { return Pos{Y: p.Y + 1, X: p.X} }
 
-func left(p Pos) Pos {
-	return Pos{Y: p.Y, X: p.X - 1}
-}
+func left(p Pos) Pos { return Pos{Y: p.Y, X: p.X - 1} }
 
-func right(p Pos) Pos {
-	return Pos{Y: p.Y, X: p.X + 1}
-}
+func right(p Pos) Pos { return Pos{Y: p.Y, X: p.X + 1} }
 
 var dirs = []Direction{down, right, up, left}
