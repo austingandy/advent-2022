@@ -143,11 +143,9 @@ func (this Hill) Neighbors(p Pos) []*Vertex {
 }
 
 func (this Hill) Find(val string) *Vertex {
-	for i := range this {
-		for j := range this[i] {
-			if v := this[i][j]; v.value == val {
-				return v
-			}
+	for _, v := range this.GetVertices() {
+		if v.value == val {
+			return v
 		}
 	}
 	return nil
@@ -155,11 +153,9 @@ func (this Hill) Find(val string) *Vertex {
 
 func (this Hill) FindAll(val string) []*Vertex {
 	vs := make([]*Vertex, 0)
-	for i := range this {
-		for j := range this[i] {
-			if v := this[i][j]; v.value == val {
-				vs = append(vs, v)
-			}
+	for _, v := range this.GetVertices() {
+		if v.value == val {
+			vs = append(vs, v)
 		}
 	}
 	return vs
@@ -218,14 +214,6 @@ func (this Hill) Reset() {
 
 func (this Hill) isValid(p Pos) bool {
 	return p.X >= 0 && p.Y >= 0 && p.Y < len(this) && p.X < len(this[p.Y])
-}
-
-func (this Hill) Positions() []Pos {
-	positions := make([]Pos, 0)
-	for _, v := range this.GetVertices() {
-		positions = append(positions, v.Pos)
-	}
-	return positions
 }
 
 func buildPath(to *Vertex) []Pos {
