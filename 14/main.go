@@ -189,9 +189,6 @@ func (g *Grid) DropAllSand() int {
 	fmt.Printf("len(rocks) is %d\n", len(g.newG))
 	t := 0
 	for g.IsAir(g.sandEntryPoint) {
-		// if !g.isBounded && t%1000 == 0 {
-		// 	fmt.Printf(g.String())
-		// }
 		if !g.DropSand() {
 			break
 		}
