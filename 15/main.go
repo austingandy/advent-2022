@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sort"
 	"strconv"
 )
 
@@ -26,7 +25,7 @@ func createSensors(fileName string) *Sensors {
 	}
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
-	sensors := NewSensors()
+	sensors := &Sensors{}
 	for scanner.Scan() {
 		s := scanner.Text()
 		ints := getInts(s)
@@ -90,33 +89,25 @@ func (s Sensor) NoBeaconAt(p Pos) bool {
 }
 
 func (s *Sensors) Part2() int {
-	sort.Slice(s.s, func(i, j int) bool {
-		return s.s[i].p.X < s.s[j].p.X || s.s[i].p.Y < s.s[j].p.Y
-	})
-	for x := 0; x <= 4000000; x += 1 {
-		if x%100000 == 0 {
-			fmt.Printf("x: %d\n", x)
-		}
-		for y := 0; y <= 4000000; y += 1 {
-			if s.Get(Pos{X: x, Y: y}) == UnknownPoint {
-				return x*4000000 + y
+	for _, sensor := range s.s {
+		// explore every point in the that is dist+1 away from the sensor
+		for yDist := 0; yDist <= sensor.d+1; yDist += 1 {
+			p := Pos{X: sensor.p.X + (sensor.d + 1 - yDist), Y: yDist + sensor.p.Y}
+			if p.X >= 0 && p.Y >= 0 && p.X <= 4000000 && p.Y <= 4000000 {
+				if s.Get(p) == UnknownPoint {
+					return p.X*4000000 + p.Y
+				}
 			}
+
 		}
 	}
 	return -1
 }
 
 type Sensors struct {
-	s        []Sensor
-	topology map[Pos]Point
+	s []Sensor
 	// upper left and bottom right most Pos in the topology
 	topLeft, bottomRight Pos
-}
-
-func NewSensors() *Sensors {
-	return &Sensors{
-		topology: make(map[Pos]Point),
-	}
 }
 
 type Point string
@@ -226,34 +217,7 @@ func abs(v int) int {
 	return v
 }
 
-// MarkPositions marks all positions within dst distance of p with v, unless they've already been marked
-func (s *Sensors) MarkPositions(p Pos, v Point, dst int) {
-	for yOffset := 0; yOffset < dst; yOffset += 1 {
-		for xOffset := 0; xOffset < dst; xOffset += 1 {
-			for _, q := range []Pos{
-				{X: p.X + xOffset, Y: p.Y + yOffset},
-				{X: p.X + xOffset, Y: p.Y - yOffset},
-				{X: p.X - xOffset, Y: p.Y + yOffset},
-				{X: p.X - xOffset, Y: p.Y - yOffset},
-			} {
-				if dist(p, q) > dst {
-					continue
-				}
-				if _, ok := s.topology[q]; !ok {
-					s.topology[q] = v
-				}
-			}
-		}
-	}
-}
-
 type Pos struct{ X, Y int }
-
-func down(p Pos) Pos { return Pos{Y: p.Y + 1, X: p.X} }
-
-func up(p Pos) Pos { return Pos{Y: p.Y - 1, X: p.X} }
-
-func left(p Pos) Pos { return Pos{Y: p.Y, X: p.X - 1} }
 
 func right(p Pos) Pos { return Pos{Y: p.Y, X: p.X + 1} }
 
