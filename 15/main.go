@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 )
 
@@ -13,7 +14,8 @@ func main() {
 	fmt.Printf(sensors.String())
 	fmt.Printf("Example result: %d\n", sensors.nonBeaconPositionsForRow(10))
 	sensors = createSensors("./input2.txt")
-	fmt.Printf("Part 1: %d\n", sensors.nonBeaconPositionsForRow(200000))
+	fmt.Printf("Part 1: %d\n", sensors.nonBeaconPositionsForRow(2000000))
+	fmt.Printf("Part 2: %d\n", sensors.Part2())
 }
 
 func createSensors(fileName string) *Sensors {
@@ -85,6 +87,23 @@ func NewSensor(p, closestBeacon Pos) Sensor {
 
 func (s Sensor) NoBeaconAt(p Pos) bool {
 	return dist(p, s.p) <= s.d
+}
+
+func (s *Sensors) Part2() int {
+	sort.Slice(s.s, func(i, j int) bool {
+		return s.s[i].p.X < s.s[j].p.X || s.s[i].p.Y < s.s[j].p.Y
+	})
+	for x := 0; x <= 4000000; x += 1 {
+		if x%100000 == 0 {
+			fmt.Printf("x: %d\n", x)
+		}
+		for y := 0; y <= 4000000; y += 1 {
+			if s.Get(Pos{X: x, Y: y}) == UnknownPoint {
+				return x*4000000 + y
+			}
+		}
+	}
+	return -1
 }
 
 type Sensors struct {
